@@ -10,6 +10,7 @@ import android.app.FragmentTransaction;
 import android.support.v13.app.FragmentPagerAdapter;
 import android.os.Bundle;
 import android.support.v4.view.ViewPager;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -18,11 +19,18 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataRequest;
+import com.google.android.gms.wearable.Wearable;
 import com.spritzinc.android.sdk.SpritzSDK;
 
 
 public class WRMainActivity extends Activity implements ActionBar.TabListener {
 
+    public static final String SPRITZ_SDK_OBJECT_PATH = "/WRS/sdkObject";
     /**
      * The {@link android.support.v4.view.PagerAdapter} that will provide
      * fragments for each of the sections. We use a
@@ -37,6 +45,7 @@ public class WRMainActivity extends Activity implements ActionBar.TabListener {
      * The {@link ViewPager} that will host the section contents.
      */
     ViewPager mViewPager;
+    protected GoogleApiClient mGoogleApiClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,10 +88,48 @@ public class WRMainActivity extends Activity implements ActionBar.TabListener {
 
         //The sole purpose of this is to hide my clientID and secret; it just calls SpritzSDK.init
         PrivateSpritzInitializer.intializeSpritz(this);
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
+                    @Override
+                    public void onConnected(Bundle connectionHint) {
+                        Log.d("GAPI", "onConnected: " + connectionHint);
+                        // Now you can use the data layer API
+                        byte[] data = PrivateSpritzInitializer.getByteArrayFromObject(SpritzSDK.getInstance());
+                        PutDataRequest syncRequest = PutDataRequest.create(SPRITZ_SDK_OBJECT_PATH);
+                        syncRequest.setData(data);
+                        PendingResult<DataApi.DataItemResult> syncResult = Wearable.DataApi.putDataItem(mGoogleApiClient, syncRequest);
+                    }
+                    @Override
+                    public void onConnectionSuspended(int cause) {
+                        Log.d("GAPI", "onConnectionSuspended: " + cause);
+                    }
+                })
+                .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
+                    @Override
+                    public void onConnectionFailed(ConnectionResult result) {
+                        Log.d("GAPI", "onConnectionFailed: " + result);
+                    }
+                })
+                        // Request access only to the Wearable API
+                .addApi(Wearable.API)
+                .build();
     }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+        //handle mResolvingError
+        mGoogleApiClient.connect();
+    }
 
     @Override
+    protected void onStop() {
+        mGoogleApiClient.disconnect();
+        super.onStop();
+    }
+
+        @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_wrmain, menu);
@@ -133,7 +180,8 @@ public class WRMainActivity extends Activity implements ActionBar.TabListener {
         public Fragment getItem(int position) {
             // getItem is called to instantiate the fragment for the given page.
             // Return a PlaceholderFragment (defined as a static inner class below).
-            return PlaceholderFragment.newInstance(position + 1);
+            //return PlaceholderFragment.newInstance(position + 1);
+            return SpritzFragment.newInstance("", "");
         }
 
         @Override
